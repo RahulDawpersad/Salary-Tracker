@@ -1,23 +1,58 @@
-"""Salary tracker - Flask + PostgreSQL (Supabase) backend.
+"""Salary tracker - Flask + PostgreSQL (Supabase) backend, with a password page.
 
-Run:  pip install flask psycopg2-binary  &&  python app.py
+Run:  pip install flask psycopg2-binary
+      set DATABASE_URL, APP_PASSWORD and SECRET_KEY (see below)
+      python app.py
 Open: http://127.0.0.1:5000
+
+Environment variables:
+  DATABASE_URL  your Supabase / Postgres connection string
+  APP_PASSWORD  the password you type on the login page (required)
+  SECRET_KEY    long random string used to sign the login cookie
+                (generate one with: python -c "import secrets; print(secrets.token_hex(32))")
+  COOKIE_SECURE set to 1 once the app is served over https
 """
 
 import csv
+import hmac
 import io
 import os
 import re
+import secrets
+import time
+from datetime import timedelta
 
 import psycopg2
 import psycopg2.extras
 
-from flask import Flask, Response, g, jsonify, render_template, request
+from flask import (
+    Flask,
+    Response,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
+if not APP_PASSWORD:
+    raise RuntimeError("Set the APP_PASSWORD environment variable before starting the app.")
+
 app = Flask(__name__)
+# If SECRET_KEY isn't set, a random one is used, which logs you out on every restart.
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
 
 
 # ---------- database ----------
@@ -55,6 +90,73 @@ def init_db():
                 CREATE INDEX IF NOT EXISTS idx_items_month ON items(month);
             """)
         con.commit()
+
+
+# ---------- login ----------
+MAX_TRIES = 5          # wrong passwords allowed...
+LOCKOUT_SECONDS = 300  # ...before that IP is locked out for 5 minutes
+failures = {}          # ip -> {"count": int, "locked_until": float}  (in memory)
+
+
+def seconds_locked(ip):
+    entry = failures.get(ip)
+    if not entry:
+        return 0
+    left = entry["locked_until"] - time.time()
+    if left > 0:
+        return int(left) + 1
+    if entry["locked_until"]:  # lock has expired, start fresh
+        failures.pop(ip, None)
+    return 0
+
+
+def record_failure(ip):
+    entry = failures.setdefault(ip, {"count": 0, "locked_until": 0})
+    entry["count"] += 1
+    if entry["count"] >= MAX_TRIES:
+        entry["locked_until"] = time.time() + LOCKOUT_SECONDS
+
+
+@app.before_request
+def require_login():
+    """Everything except the login page and static files needs a logged-in session."""
+    if request.endpoint in ("login", "static") or session.get("auth"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(error="Please log in again."), 401
+    return redirect(url_for("login"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("auth"):
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        wait = seconds_locked(ip)
+        if wait:
+            error = f"Too many tries. Wait about {(wait + 59) // 60} min and try again."
+        else:
+            supplied = (request.form.get("password") or "").encode()
+            if hmac.compare_digest(supplied, APP_PASSWORD.encode()):
+                failures.pop(ip, None)
+                session.clear()
+                session.permanent = True
+                session["auth"] = True
+                return redirect(url_for("index"))
+            record_failure(ip)
+            time.sleep(0.5)  # slow down guessing a little
+            error = "Wrong password."
+
+    return render_template("login.html", error=error), (401 if error else 200)
+
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # ---------- helpers ----------
