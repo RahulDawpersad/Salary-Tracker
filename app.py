@@ -1,20 +1,21 @@
-"""Salary tracker - Flask + PostgreSQL (Supabase) backend, with a password page.
+"""Salary tracker - Flask + PostgreSQL (Supabase) backend, with per-user accounts.
 
 Run:  pip install flask psycopg2-binary
-      set DATABASE_URL, APP_PASSWORD and SECRET_KEY (see below)
+      set DATABASE_URL and SECRET_KEY (see below)
       python app.py
 Open: http://127.0.0.1:5000
 
 Environment variables:
   DATABASE_URL  your Supabase / Postgres connection string
-  APP_PASSWORD  the password you type on the login page (required)
   SECRET_KEY    long random string used to sign the login cookie
                 (generate one with: python -c "import secrets; print(secrets.token_hex(32))")
   COOKIE_SECURE set to 1 once the app is served over https
+
+Every visitor signs up with an email + their own password. Each account only
+ever sees its own salary and accounts.
 """
 
 import csv
-import hmac
 import io
 import os
 import re
@@ -23,6 +24,7 @@ import time
 from datetime import timedelta
 
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
 
 from flask import (
@@ -36,16 +38,14 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-APP_PASSWORD = os.environ.get("APP_PASSWORD")
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-
-if not APP_PASSWORD:
-    raise RuntimeError("Set the APP_PASSWORD environment variable before starting the app.")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 app = Flask(__name__)
-# If SECRET_KEY isn't set, a random one is used, which logs you out on every restart.
+# If SECRET_KEY isn't set, a random one is used, which logs everyone out on every restart.
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -74,12 +74,20 @@ def init_db():
     with psycopg2.connect(DATABASE_URL) as con:
         with con.cursor() as cur:
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id            SERIAL PRIMARY KEY,
+                    email         TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
                 CREATE TABLE IF NOT EXISTS months (
-                    month  TEXT PRIMARY KEY,
-                    salary REAL NOT NULL DEFAULT 0
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    month   TEXT NOT NULL,
+                    salary  REAL NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS items (
                     id        SERIAL PRIMARY KEY,
+                    user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
                     month     TEXT NOT NULL,
                     name      TEXT NOT NULL,
                     category  TEXT NOT NULL DEFAULT 'Other',
@@ -87,15 +95,35 @@ def init_db():
                     recurring INTEGER NOT NULL DEFAULT 0,
                     paid      INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX IF NOT EXISTS idx_items_month ON items(month);
+
+                -- upgrade tables that were created before accounts existed
+                ALTER TABLE months ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+                ALTER TABLE items  ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+                ALTER TABLE months DROP CONSTRAINT IF EXISTS months_pkey;
+
+                CREATE UNIQUE INDEX IF NOT EXISTS months_user_month ON months(user_id, month);
+                CREATE INDEX IF NOT EXISTS idx_items_user_month ON items(user_id, month);
             """)
         con.commit()
 
 
-# ---------- login ----------
+# ---------- accounts & login ----------
 MAX_TRIES = 5          # wrong passwords allowed...
 LOCKOUT_SECONDS = 300  # ...before that IP is locked out for 5 minutes
 failures = {}          # ip -> {"count": int, "locked_until": float}  (in memory)
+
+# Used so a login for an unknown email takes as long as one for a real email.
+DUMMY_HASH = generate_password_hash("not-a-real-password")
+
+
+def client_ip():
+    """Best guess at the real visitor IP.
+
+    Behind Render's proxy, request.remote_addr is the proxy for everybody, which
+    would make one shared lockout for all visitors. Render sits behind Cloudflare,
+    which sets CF-Connecting-IP, so use that when it's there.
+    """
+    return request.headers.get("CF-Connecting-IP") or request.remote_addr or "unknown"
 
 
 def seconds_locked(ip):
@@ -117,40 +145,104 @@ def record_failure(ip):
         entry["locked_until"] = time.time() + LOCKOUT_SECONDS
 
 
+def normalize_email(value):
+    return (value or "").strip().lower()
+
+
+def uid():
+    """The logged-in user's id."""
+    return session["user_id"]
+
+
+def start_session(user_id):
+    session.clear()
+    session.permanent = True
+    session["user_id"] = user_id
+
+
 @app.before_request
 def require_login():
-    """Everything except the login page and static files needs a logged-in session."""
-    if request.endpoint in ("login", "static") or session.get("auth"):
+    """Everything except login, signup and static files needs a logged-in session."""
+    if request.endpoint in ("login", "signup", "static") or session.get("user_id"):
         return None
     if request.path.startswith("/api/"):
         return jsonify(error="Please log in again."), 401
     return redirect(url_for("login"))
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if session.get("auth"):
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if session.get("user_id"):
         return redirect(url_for("index"))
 
-    error = None
+    error, email = None, ""
     if request.method == "POST":
-        ip = request.remote_addr or "unknown"
+        email = normalize_email(request.form.get("email"))
+        password = request.form.get("password") or ""
+        confirm = request.form.get("confirm") or ""
+
+        if not EMAIL_RE.match(email) or len(email) > 254:
+            error = "Enter a valid email address."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif len(password) > 128:
+            error = "Password can't be longer than 128 characters."
+        elif password != confirm:
+            error = "The two passwords don't match."
+        else:
+            db = get_db()
+            try:
+                with cursor(db) as cur:
+                    cur.execute("SELECT COUNT(*) AS n FROM users")
+                    first_user = cur.fetchone()["n"] == 0
+                    cur.execute(
+                        "INSERT INTO users(email, password_hash) VALUES (%s, %s) RETURNING id",
+                        (email, generate_password_hash(password)),
+                    )
+                    user_id = cur.fetchone()["id"]
+                    if first_user:
+                        # data saved before accounts existed goes to the first account
+                        cur.execute("UPDATE months SET user_id = %s WHERE user_id IS NULL", (user_id,))
+                        cur.execute("UPDATE items SET user_id = %s WHERE user_id IS NULL", (user_id,))
+                db.commit()
+            except psycopg2.errors.UniqueViolation:
+                db.rollback()
+                error = "An account with that email already exists. Try logging in."
+            else:
+                start_session(user_id)
+                return redirect(url_for("index"))
+
+    return render_template("login.html", mode="signup", error=error, email=email), (400 if error else 200)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("user_id"):
+        return redirect(url_for("index"))
+
+    error, email = None, ""
+    if request.method == "POST":
+        email = normalize_email(request.form.get("email"))
+        password = (request.form.get("password") or "")[:200]
+        ip = client_ip()
         wait = seconds_locked(ip)
         if wait:
             error = f"Too many tries. Wait about {(wait + 59) // 60} min and try again."
         else:
-            supplied = (request.form.get("password") or "").encode()
-            if hmac.compare_digest(supplied, APP_PASSWORD.encode()):
+            db = get_db()
+            with cursor(db) as cur:
+                cur.execute("SELECT id, password_hash FROM users WHERE email = %s", (email,))
+                user = cur.fetchone()
+            password_ok = check_password_hash(user["password_hash"] if user else DUMMY_HASH, password)
+            if user and password_ok:
                 failures.pop(ip, None)
-                session.clear()
-                session.permanent = True
-                session["auth"] = True
+                start_session(user["id"])
                 return redirect(url_for("index"))
             record_failure(ip)
             time.sleep(0.5)  # slow down guessing a little
-            error = "Wrong password."
+            error = "Wrong email or password."
 
-    return render_template("login.html", error=error), (401 if error else 200)
+    return render_template("login.html", mode="login", error=error, email=email), (401 if error else 200)
 
 
 @app.get("/logout")
@@ -208,11 +300,12 @@ def cursor(db):
     return db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def ensure_month(db, month):
+def ensure_month(db, user_id, month):
     with cursor(db) as cur:
         cur.execute(
-            "INSERT INTO months(month, salary) VALUES (%s, 0) ON CONFLICT (month) DO NOTHING",
-            (month,)
+            "INSERT INTO months(user_id, month, salary) VALUES (%s, %s, 0) "
+            "ON CONFLICT (user_id, month) DO NOTHING",
+            (user_id, month),
         )
 
 
@@ -225,7 +318,14 @@ def previous_month(month):
 # ---------- pages ----------
 @app.get("/")
 def index():
-    return render_template("index.html")
+    db = get_db()
+    with cursor(db) as cur:
+        cur.execute("SELECT email FROM users WHERE id = %s", (uid(),))
+        row = cur.fetchone()
+    if row is None:  # the account was deleted, so the cookie is stale
+        session.clear()
+        return redirect(url_for("login"))
+    return render_template("index.html", email=row["email"])
 
 
 # ---------- API ----------
@@ -234,9 +334,11 @@ def get_month(month):
     check_month(month)
     db = get_db()
     with cursor(db) as cur:
-        cur.execute("SELECT salary FROM months WHERE month = %s", (month,))
+        cur.execute("SELECT salary FROM months WHERE user_id = %s AND month = %s", (uid(), month))
         row = cur.fetchone()
-        cur.execute("SELECT * FROM items WHERE month = %s ORDER BY id", (month,))
+        cur.execute(
+            "SELECT * FROM items WHERE user_id = %s AND month = %s ORDER BY id", (uid(), month)
+        )
         items = cur.fetchall()
     return jsonify(
         month=month,
@@ -250,9 +352,12 @@ def set_salary(month):
     check_month(month)
     salary = parse_amount((request.get_json(silent=True) or {}).get("salary"))
     db = get_db()
-    ensure_month(db, month)
+    ensure_month(db, uid(), month)
     with cursor(db) as cur:
-        cur.execute("UPDATE months SET salary = %s WHERE month = %s", (salary, month))
+        cur.execute(
+            "UPDATE months SET salary = %s WHERE user_id = %s AND month = %s",
+            (salary, uid(), month),
+        )
     db.commit()
     return jsonify(month=month, salary=salary)
 
@@ -266,11 +371,12 @@ def add_item(month):
     amount = parse_amount(data.get("amount"))
     recurring = 1 if data.get("recurring") else 0
     db = get_db()
-    ensure_month(db, month)
+    ensure_month(db, uid(), month)
     with cursor(db) as cur:
         cur.execute(
-            "INSERT INTO items(month, name, category, amount, recurring) VALUES (%s,%s,%s,%s,%s) RETURNING *",
-            (month, name, category, amount, recurring),
+            "INSERT INTO items(user_id, month, name, category, amount, recurring) "
+            "VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
+            (uid(), month, name, category, amount, recurring),
         )
         row = cur.fetchone()
     db.commit()
@@ -301,8 +407,8 @@ def update_item(item_id):
     db = get_db()
     with cursor(db) as cur:
         cur.execute(
-            f"UPDATE items SET {', '.join(fields)} WHERE id = %s RETURNING *",
-            (*values, item_id),
+            f"UPDATE items SET {', '.join(fields)} WHERE id = %s AND user_id = %s RETURNING *",
+            (*values, item_id, uid()),
         )
         row = cur.fetchone()
     db.commit()
@@ -315,7 +421,7 @@ def update_item(item_id):
 def delete_item(item_id):
     db = get_db()
     with cursor(db) as cur:
-        cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
+        cur.execute("DELETE FROM items WHERE id = %s AND user_id = %s", (item_id, uid()))
     db.commit()
     return jsonify(deleted=item_id)
 
@@ -326,25 +432,26 @@ def copy_recurring(month):
     check_month(month)
     prev = previous_month(month)
     db = get_db()
-    ensure_month(db, month)
+    ensure_month(db, uid(), month)
 
     with cursor(db) as cur:
-        cur.execute("SELECT salary FROM months WHERE month = %s", (month,))
+        cur.execute("SELECT salary FROM months WHERE user_id = %s AND month = %s", (uid(), month))
         current = cur.fetchone()
-        cur.execute("SELECT salary FROM months WHERE month = %s", (prev,))
+        cur.execute("SELECT salary FROM months WHERE user_id = %s AND month = %s", (uid(), prev))
         last = cur.fetchone()
 
         if current["salary"] == 0 and last and last["salary"] > 0:
             cur.execute(
-                "UPDATE months SET salary = %s WHERE month = %s",
-                (last["salary"], month)
+                "UPDATE months SET salary = %s WHERE user_id = %s AND month = %s",
+                (last["salary"], uid(), month),
             )
 
-        cur.execute("SELECT name, category FROM items WHERE month = %s", (month,))
+        cur.execute("SELECT name, category FROM items WHERE user_id = %s AND month = %s", (uid(), month))
         existing = {(r["name"].lower(), r["category"]) for r in cur.fetchall()}
 
         cur.execute(
-            "SELECT * FROM items WHERE month = %s AND recurring = 1 ORDER BY id", (prev,)
+            "SELECT * FROM items WHERE user_id = %s AND month = %s AND recurring = 1 ORDER BY id",
+            (uid(), prev),
         )
         prev_items = cur.fetchall()
 
@@ -353,8 +460,9 @@ def copy_recurring(month):
             if (r["name"].lower(), r["category"]) in existing:
                 continue
             cur.execute(
-                "INSERT INTO items(month, name, category, amount, recurring) VALUES (%s,%s,%s,%s,1)",
-                (month, r["name"], r["category"], r["amount"]),
+                "INSERT INTO items(user_id, month, name, category, amount, recurring) "
+                "VALUES (%s,%s,%s,%s,%s,1)",
+                (uid(), month, r["name"], r["category"], r["amount"]),
             )
             copied += 1
 
@@ -371,10 +479,11 @@ def history():
                    m.salary,
                    COALESCE(SUM(i.amount), 0) AS spent
             FROM months m
-            LEFT JOIN items i ON i.month = m.month
-            GROUP BY m.month
+            LEFT JOIN items i ON i.month = m.month AND i.user_id = m.user_id
+            WHERE m.user_id = %s
+            GROUP BY m.month, m.salary
             ORDER BY m.month
-        """)
+        """, (uid(),))
         rows = cur.fetchall()
     return jsonify([
         {
@@ -393,9 +502,11 @@ def export_csv():
     with cursor(db) as cur:
         cur.execute("""
             SELECT m.month, m.salary, i.name, i.category, i.amount, i.recurring, i.paid
-            FROM months m LEFT JOIN items i ON i.month = m.month
+            FROM months m
+            LEFT JOIN items i ON i.month = m.month AND i.user_id = m.user_id
+            WHERE m.user_id = %s
             ORDER BY m.month, i.id
-        """)
+        """, (uid(),))
         rows = cur.fetchall()
     buf = io.StringIO()
     writer = csv.writer(buf)
