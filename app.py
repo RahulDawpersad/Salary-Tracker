@@ -13,7 +13,9 @@ import sqlite3
 from flask import Flask, Response, g, jsonify, render_template, request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "salary.db")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "salary.db")
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 app = Flask(__name__)
