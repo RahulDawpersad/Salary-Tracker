@@ -1,0 +1,1124 @@
+:root {
+  --bg: #f3f5f9;
+  --card: #ffffff;
+  --ink: #172033;
+  --muted: #6b7588;
+  --line: #e4e8ef;
+  --primary: #3f5ef2;
+  --primary-ink: #ffffff;
+  --primary-soft: #e9edfe;
+  --good: #128a45;
+  --good-bg: #e2f5ea;
+  --warn: #a5660a;
+  --warn-bg: #fdf1d8;
+  --bad: #d63d33;
+  --side: #101a33;
+  --shadow: 0 1px 2px rgba(16, 26, 51, 0.05), 0 4px 16px rgba(16, 26, 51, 0.04);
+  --bar-salary: #c9d3fb;
+  --bar-spent: #3f5ef2;
+  --sidebar-w: 232px;
+  --topbar-h: 56px;
+  font-family: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --card: #131c2f;
+    --ink: #e6ebf5;
+    --muted: #93a0b8;
+    --line: #22304a;
+    --primary: #6f88ff;
+    --primary-ink: #0b1220;
+    --primary-soft: #1b2748;
+    --good: #5fd08c;
+    --good-bg: #16352a;
+    --warn: #f0b14c;
+    --warn-bg: #3a2c12;
+    --bad: #f0857a;
+    --side: #0a1020;
+    --shadow: none;
+    --bar-salary: #2b3b6e;
+    --bar-spent: #6f88ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 16px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prevent body scroll when mobile sidebar is open */
+body.sidebar-open {
+  overflow: hidden;
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+p {
+  margin: 0;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+  color: var(--ink);
+  color-scheme: light dark;
+}
+
+select option {
+  background: var(--card);
+  color: var(--ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   LAYOUT SHELL — desktop: sidebar + main side by side
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--side);
+  color: #c3cde4;
+  padding: 22px 14px;
+  overflow-y: auto;
+  /* Smooth slide transition for mobile drawer */
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 200;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 8px 28px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+/* Close button inside sidebar — desktop: hidden */
+.sidebar-close {
+  display: none;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav a:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.nav a.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.side-foot {
+  margin: auto 8px 0;
+  font-size: 12.5px;
+  color: #7f8bab;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   MOBILE TOP BAR — hidden on desktop
+   ============================================================ */
+.mobile-topbar {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--topbar-h);
+  background: var(--side);
+  color: #fff;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  flex-shrink: 0;
+}
+
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* Hamburger button */
+.hamburger {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 0;
+}
+
+.hamburger:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.hamburger svg {
+  display: block;
+}
+
+/* Hamburger → X swap */
+.hamburger .icon-close {
+  display: none;
+}
+
+.hamburger .icon-menu {
+  display: block;
+}
+
+/* ============================================================
+   SIDEBAR OVERLAY — behind the drawer on mobile
+   ============================================================ */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(10, 16, 32, 0.6);
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  pointer-events: none;
+}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+.main {
+  padding: 28px 32px 64px;
+  width: 100%;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.sub {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.month-switch {
+  display: flex;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.month-switch button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.month-switch button:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.month-switch input {
+  border: 0;
+  background: transparent;
+  font-weight: 500;
+  padding: 6px 4px;
+  color: var(--ink);
+  color-scheme: light dark;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--muted);
+}
+
+.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.status {
+  min-height: 22px;
+  margin: 10px 0 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.status.error {
+  color: var(--bad);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- KPI cards ---------- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.kpi-label {
+  color: var(--muted);
+  font-size: 14px;
+  display: block;
+}
+
+.kpi-value {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.kpi-sub {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.salary-input {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.salary-input span {
+  font-size: 22px;
+  color: var(--muted);
+}
+
+.salary-input input {
+  width: 100%;
+  padding: 0 0 2px;
+  border: 0;
+  border-bottom: 2px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.salary-input input:hover {
+  border-bottom-color: var(--muted);
+}
+
+.salary-input input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--primary);
+}
+
+.meter {
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 99px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: var(--good);
+  transition: width 0.3s;
+}
+
+.kpi-left {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+.kpi-left .kpi-label,
+.kpi-left .kpi-sub {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.kpi-left.short {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+/* ---------- donut + chart ---------- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.grid-2 h2 {
+  margin-bottom: 14px;
+}
+
+.grid-2 .card-head h2 {
+  margin-bottom: 0;
+}
+
+.donut {
+  display: grid;
+  place-items: center;
+}
+
+.donut svg {
+  width: 100%;
+  max-width: 210px;
+  height: auto;
+}
+
+.donut .track {
+  stroke: var(--bg);
+}
+
+.donut .big {
+  fill: var(--ink);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.donut .big.bad {
+  fill: var(--bad);
+}
+
+.donut .small {
+  fill: var(--muted);
+  font-size: 11.5px;
+}
+
+.legend {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: center;
+}
+
+.legend .meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.legend .meta b {
+  font-weight: 500;
+}
+
+.legend .meta span {
+  color: var(--muted);
+}
+
+.legend .bar {
+  grid-column: 2 / 4;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.legend .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+}
+
+.legend .amt {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.legend .empty {
+  color: var(--muted);
+  display: block;
+  text-align: center;
+}
+
+.chip {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 17px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chart-key {
+  display: flex;
+  gap: 16px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.chart-key .k {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+
+.k.salary {
+  background: var(--bar-salary);
+}
+
+.k.spent {
+  background: var(--bar-spent);
+}
+
+#chart {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#chart svg {
+  width: 100%;
+  min-width: 340px;
+  height: auto;
+  display: block;
+}
+
+#chart text {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+#chart .grid {
+  stroke: var(--line);
+  stroke-dasharray: 3 4;
+}
+
+#chart .base {
+  stroke: var(--line);
+  stroke-dasharray: none;
+}
+
+#chart .b-salary {
+  fill: var(--bar-salary);
+}
+
+#chart .b-spent {
+  fill: var(--bar-spent);
+}
+
+#chart .cur-bg {
+  fill: var(--primary-soft);
+}
+
+#chart .cur-label {
+  fill: var(--primary);
+  font-weight: 700;
+}
+
+#chart .left-pos {
+  fill: var(--good);
+  font-weight: 700;
+}
+
+#chart .left-neg {
+  fill: var(--bad);
+  font-weight: 700;
+}
+
+#chart g.grp {
+  cursor: pointer;
+}
+
+#chart g.grp:hover .b-spent {
+  opacity: 0.85;
+}
+
+#avg {
+  margin-top: 10px;
+}
+
+/* ---------- accounts table ---------- */
+.accounts {
+  margin-top: 16px;
+}
+
+.tabs {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.tabs button {
+  border: 0;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tabs button.on {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(16, 26, 51, 0.12);
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) 130px 88px 96px 32px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.row.head {
+  border-top: 0;
+  padding: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.row .r {
+  text-align: right;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cell {
+  width: 100%;
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink);
+  color-scheme: light dark;
+}
+
+.cell:hover {
+  border-color: var(--line);
+}
+
+.cell.amt {
+  text-align: right;
+  font-weight: 500;
+}
+
+.row.is-paid .name-cell .cell {
+  color: var(--muted);
+}
+
+.pill {
+  border: 0;
+  border-radius: 99px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pill.paid {
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+.pill.due {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+.sw-text {
+  display: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.icon {
+  border: 0;
+  background: transparent;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.icon:hover {
+  background: var(--bg);
+  color: var(--bad);
+}
+
+.empty-rows {
+  text-align: center;
+  padding: 34px 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+.empty-rows .btn {
+  margin-top: 12px;
+}
+
+.table-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: right;
+}
+
+/* ---------- dialog ---------- */
+dialog {
+  width: min(440px, 92vw);
+  padding: 0;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(10, 16, 32, 0.35);
+}
+
+dialog::backdrop {
+  background: rgba(10, 16, 32, 0.55);
+}
+
+dialog form {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  color: var(--ink);
+  width: 100%;
+  background: var(--card);
+  color-scheme: light dark;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   BREAKPOINT: 1280px — tighten KPI values
+   ============================================================ */
+@media (max-width: 1280px) {
+  .kpi-value {
+    font-size: 24px;
+  }
+}
+
+/* ============================================================
+   BREAKPOINT: 1100px — stack charts
+   ============================================================ */
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============================================================
+   BREAKPOINT: 900px — MOBILE DRAWER MODE
+   ============================================================ */
+@media (max-width: 900px) {
+
+  /* 1. Collapse the two-column layout to single column */
+  .app {
+    display: block;
+    /* sidebar is now position:fixed, so block works cleanly */
+  }
+
+  /* 2. Show the mobile top bar */
+  .mobile-topbar {
+    display: flex;
+  }
+
+  /* 3. Turn sidebar into an off-canvas drawer */
+  .side {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(var(--sidebar-w), 85vw);
+    height: 100%;
+    transform: translateX(-110%);
+    /* fully off-screen to the left */
+    padding: 20px 14px 28px;
+    box-shadow: 4px 0 32px rgba(10, 16, 32, 0.4);
+  }
+
+  /* When sidebar is open */
+  .side.is-open {
+    transform: translateX(0);
+  }
+
+  /* 4. Show the X button inside the sidebar */
+  .sidebar-close {
+    display: flex;
+  }
+
+  /* Push brand text right of the close button space */
+  .brand {
+    margin: 0 8px 28px 44px;
+  }
+
+  /* 5. Activate the overlay */
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .sidebar-overlay.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* 6. Main content gets top padding for the sticky mobile topbar */
+  .main {
+    padding: 20px 16px 56px;
+  }
+}
+
+/* ============================================================
+   BREAKPOINT: 760px — accounts table reflows
+   ============================================================ */
+@media (max-width: 760px) {
+  .row.head {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "n  a"
+      "c  s"
+      "m  d";
+    row-gap: 6px;
+    padding: 14px 0;
+  }
+
+  .row> :nth-child(1) {
+    grid-area: n;
+  }
+
+  .row> :nth-child(2) {
+    grid-area: c;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .row> :nth-child(3) {
+    grid-area: a;
+    text-align: right;
+  }
+
+  .row> :nth-child(4) {
+    grid-area: s;
+    justify-self: end;
+  }
+
+  .row> :nth-child(5) {
+    grid-area: m;
+  }
+
+  .row> :nth-child(6) {
+    grid-area: d;
+    justify-self: end;
+  }
+
+  .sw-text {
+    display: inline;
+  }
+
+  .cell {
+    padding: 4px 0;
+    border-radius: 0;
+    font-size: 13px;
+  }
+
+  .topbar {
+    gap: 12px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .kpi-value {
+    font-size: 22px;
+  }
+}
+
+/* ============================================================
+   BREAKPOINT: 640px — topbar actions stack vertically
+   ============================================================ */
+@media (max-width: 640px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .month-switch {
+    align-self: flex-start;
+  }
+
+  .actions .btn {
+    justify-content: center;
+  }
+}
+
+/* ============================================================
+   BREAKPOINT: 560px — single-column KPIs
+   ============================================================ */
+@media (max-width: 560px) {
+  .kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kpi-value {
+    font-size: 26px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  dialog {
+    width: 96vw;
+    border-radius: 14px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .main {
+    padding: 16px 12px 56px;
+  }
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

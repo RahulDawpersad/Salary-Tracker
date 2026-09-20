@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Salary tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+  <!-- ===== Sidebar overlay (mobile only) ===== -->
+  <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
+  <div class="app">
+
+    <!-- ===== Mobile top bar (hidden on desktop) ===== -->
+    <header class="mobile-topbar" aria-label="Mobile navigation bar">
+      <div class="mobile-brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+            <path d="M22 12A10 10 0 0 0 12 2v10z" />
+          </svg>
+        </span>
+        Salary tracker
+      </div>
+      <button type="button" class="hamburger" id="hamburger" aria-label="Open navigation" aria-expanded="false"
+        aria-controls="sidebar">
+        <!-- Menu icon -->
+        <svg class="icon-menu" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+        <!-- Close icon -->
+        <svg class="icon-close" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- ===== Sidebar ===== -->
+    <aside class="side" id="sidebar" aria-label="Main navigation">
+      <!-- Close button (visible on mobile inside drawer) -->
+      <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Close navigation">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+            <path d="M22 12A10 10 0 0 0 12 2v10z" />
+          </svg>
+        </span>
+        Salary tracker
+      </div>
+
+      <nav class="nav" id="nav">
+        <a href="#overview" class="active">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          Overview
+        </a>
+        <a href="#accounts">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+          Accounts
+        </a>
+        <a href="#history">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+          History
+        </a>
+        <a href="/api/export.csv">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export CSV
+        </a>
+      </nav>
+
+      <p class="side-foot">Saved on this computer in salary.db</p>
+    </aside>
+
+    <!-- ===== Main content ===== -->
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1>Overview</h1>
+          <p class="sub" id="sub"></p>
+        </div>
+        <div class="actions">
+          <div class="month-switch">
+            <button type="button" id="prevMonth" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <input type="month" id="month" aria-label="Month">
+            <button type="button" id="nextMonth" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+          <button type="button" class="btn" id="copyPrev" title="Bring over last month's accounts marked Monthly">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Copy monthly accounts
+          </button>
+          <button type="button" class="btn primary" id="openAdd">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add account
+          </button>
+        </div>
+      </header>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <!-- KPI cards -->
+      <section class="kpis" id="overview" aria-label="This month at a glance">
+        <article class="card kpi">
+          <label class="kpi-label" for="salary">Monthly salary</label>
+          <div class="salary-input">
+            <span aria-hidden="true">R</span>
+            <input id="salary" inputmode="decimal" placeholder="0.00" autocomplete="off">
+          </div>
+          <p class="kpi-sub">Type it in and press Enter</p>
+        </article>
+
+        <article class="card kpi">
+          <p class="kpi-label">Total accounts</p>
+          <p class="kpi-value" id="kSpent">R 0.00</p>
+          <p class="kpi-sub" id="kSpentSub"></p>
+        </article>
+
+        <article class="card kpi">
+          <p class="kpi-label">Paid so far</p>
+          <p class="kpi-value" id="kPaid">R 0.00</p>
+          <div class="meter" aria-hidden="true"><span id="kPaidBar"></span></div>
+          <p class="kpi-sub" id="kPaidSub"></p>
+        </article>
+
+        <article class="card kpi kpi-left" id="kLeftCard">
+          <p class="kpi-label" id="kLeftLabel">Left over</p>
+          <p class="kpi-value" id="kLeft">R 0.00</p>
+          <p class="kpi-sub" id="kLeftSub"></p>
+          <p class="kpi-sub" id="kHand"></p>
+        </article>
+      </section>
+
+      <!-- donut + trend -->
+      <section class="grid-2">
+        <article class="card" aria-labelledby="split-h">
+          <h2 id="split-h">Where your salary goes</h2>
+          <div id="donut" class="donut"></div>
+          <ul id="legend" class="legend"></ul>
+        </article>
+
+        <article class="card" id="history" aria-labelledby="history-h">
+          <div class="card-head">
+            <h2 id="history-h">Month by month</h2>
+            <div class="chart-key">
+              <span><i class="k salary"></i>Salary</span>
+              <span><i class="k spent"></i>Accounts</span>
+            </div>
+          </div>
+          <div id="chart"></div>
+          <p id="avg" class="muted"></p>
+        </article>
+      </section>
+
+      <!-- accounts -->
+      <section class="card accounts" id="accounts" aria-labelledby="accounts-h">
+        <div class="card-head">
+          <h2 id="accounts-h">Accounts</h2>
+          <div class="tabs" role="group" aria-label="Filter accounts">
+            <button type="button" data-filter="all" class="on">All</button>
+            <button type="button" data-filter="due">To pay</button>
+            <button type="button" data-filter="paid">Paid</button>
+          </div>
+        </div>
+
+        <div class="row head" aria-hidden="true">
+          <span>Account</span><span>Category</span><span class="r">Amount</span>
+          <span>Status</span><span>Monthly</span><span></span>
+        </div>
+        <div id="rows"></div>
+        <p id="tableFoot" class="table-foot"></p>
+      </section>
+    </div><!-- /.main -->
+  </div><!-- /.app -->
+
+  <!-- Add account dialog -->
+  <dialog id="addDialog" aria-labelledby="add-h">
+    <form id="addForm" autocomplete="off">
+      <h2 id="add-h">Add account</h2>
+      <label class="field"><span>Account name</span>
+        <input id="newName" placeholder="e.g. Rent" maxlength="80" required>
+      </label>
+      <div class="field-row">
+        <label class="field"><span>Category</span>
+          <select id="newCategory"></select>
+        </label>
+        <label class="field"><span>Amount</span>
+          <input id="newAmount" inputmode="decimal" placeholder="0.00" required>
+        </label>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="newRecurring" checked>
+        <span class="sw-label">Repeats every month</span>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="closeAdd">Done</button>
+        <button type="submit" class="btn primary">Add account</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+  <!-- ===== Hamburger / drawer script ===== -->
+  <script>
+    (function () {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const hamburger = document.getElementById('hamburger');
+      const closeBtn = document.getElementById('sidebarClose');
+
+      function openSidebar() {
+        sidebar.classList.add('is-open');
+        overlay.classList.add('is-visible');
+        document.body.classList.add('sidebar-open');
+        hamburger.setAttribute('aria-expanded', 'true');
+        hamburger.querySelector('.icon-menu').style.display = 'none';
+        hamburger.querySelector('.icon-close').style.display = 'block';
+        // Trap focus inside sidebar for accessibility
+        closeBtn.focus();
+      }
+
+      function closeSidebar() {
+        sidebar.classList.remove('is-open');
+        overlay.classList.remove('is-visible');
+        document.body.classList.remove('sidebar-open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.querySelector('.icon-menu').style.display = 'block';
+        hamburger.querySelector('.icon-close').style.display = 'none';
+        hamburger.focus();
+      }
+
+      hamburger.addEventListener('click', openSidebar);
+      closeBtn.addEventListener('click', closeSidebar);
+      overlay.addEventListener('click', closeSidebar);
+
+      // Close drawer when a nav link is clicked on mobile
+      document.querySelectorAll('#nav a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          if (window.innerWidth <= 900) closeSidebar();
+        });
+      });
+
+      // Escape key closes the drawer
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && sidebar.classList.contains('is-open')) closeSidebar();
+      });
+    })();
+  </script>
+
+</body>
+
+</html>
