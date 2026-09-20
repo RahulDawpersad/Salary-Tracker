@@ -2,80 +2,126 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Log in · Salary tracker</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .login-wrap {
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            padding: 24px;
-        }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ 'Create account' if mode == 'signup' else 'Log in' }} · Salary tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
 
-        .login-card {
-            width: min(380px, 100%);
-            display: grid;
-            gap: 16px;
-            padding: 28px;
-        }
+    .login-card {
+      width: min(380px, 100%);
+      display: grid;
+      gap: 16px;
+      padding: 28px;
+    }
 
-        .login-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 700;
-            font-size: 17px;
-        }
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 17px;
+    }
 
-        .login-card .status {
-            margin: 0;
-            min-height: 0;
-        }
+    .login-card .status {
+      margin: 0;
+      min-height: 0;
+    }
 
-        .login-card .btn.primary {
-            justify-content: center;
-            width: 100%;
-            padding: 11px 14px;
-        }
-    </style>
+    .login-card .btn.primary {
+      justify-content: center;
+      width: 100%;
+      padding: 11px 14px;
+    }
+
+    .login-switch {
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .login-switch a {
+      color: var(--primary);
+      font-weight: 500;
+      text-decoration: none;
+    }
+
+    .login-switch a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </head>
 
 <body>
-    <main class="login-wrap">
-        <form class="card login-card" method="post" action="{{ url_for('login') }}">
-            <div class="login-brand">
-                <span class="logo" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                        <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                    </svg>
-                </span>
-                Salary tracker
-            </div>
+  <main class="login-wrap">
+    <form class="card login-card" method="post"
+      action="{{ url_for('signup') if mode == 'signup' else url_for('login') }}">
+      <div class="login-brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+            <path d="M22 12A10 10 0 0 0 12 2v10z" />
+          </svg>
+        </span>
+        Salary tracker
+      </div>
 
-            <div>
-                <h1 style="font-size: 22px;">Welcome back</h1>
-                <p class="sub">Enter your password to continue.</p>
-            </div>
+      <div>
+        {% if mode == 'signup' %}
+        <h1 style="font-size: 22px;">Create your account</h1>
+        <p class="sub">Pick a password only you know. Your numbers stay private to your account.</p>
+        {% else %}
+        <h1 style="font-size: 22px;">Welcome back</h1>
+        <p class="sub">Log in to see your salary and accounts.</p>
+        {% endif %}
+      </div>
 
-            {% if error %}
-            <p class="status error" role="alert">{{ error }}</p>
-            {% endif %}
+      {% if error %}
+      <p class="status error" role="alert">{{ error }}</p>
+      {% endif %}
 
-            <label class="field"><span>Password</span>
-                <input type="password" name="password" autocomplete="current-password" autofocus required>
-            </label>
+      <label class="field"><span>Email</span>
+        <input type="email" name="email" value="{{ email or '' }}" autocomplete="email" maxlength="254"
+          {{ '' if error and email else 'autofocus' }} required>
+      </label>
 
-            <button type="submit" class="btn primary">Log in</button>
-        </form>
-    </main>
+      <label class="field"><span>Password</span>
+        {% if mode == 'signup' %}
+        <input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+        {% else %}
+        <input type="password" name="password" autocomplete="current-password" required>
+        {% endif %}
+      </label>
+
+      {% if mode == 'signup' %}
+      <label class="field"><span>Confirm password</span>
+        <input type="password" name="confirm" autocomplete="new-password" minlength="8" maxlength="128" required>
+      </label>
+      <p class="muted" style="margin-top: -6px;">At least 8 characters.</p>
+      {% endif %}
+
+      <button type="submit" class="btn primary">{{ 'Create account' if mode == 'signup' else 'Log in' }}</button>
+
+      <p class="login-switch">
+        {% if mode == 'signup' %}
+        Already have an account? <a href="{{ url_for('login') }}">Log in</a>
+        {% else %}
+        New here? <a href="{{ url_for('signup') }}">Create an account</a>
+        {% endif %}
+      </p>
+    </form>
+  </main>
 </body>
 
 </html>
