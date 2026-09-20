@@ -1,6 +1,6 @@
-"""Salary tracker - Flask + SQLite backend.
+"""Salary tracker - Flask + PostgreSQL (Supabase) backend.
 
-Run:  pip install flask  &&  python app.py
+Run:  pip install flask psycopg2-binary  &&  python app.py
 Open: http://127.0.0.1:5000
 """
 
@@ -8,14 +8,13 @@ import csv
 import io
 import os
 import re
-import sqlite3
+
+import psycopg2
+import psycopg2.extras
 
 from flask import Flask, Response, g, jsonify, render_template, request
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "salary.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 app = Flask(__name__)
@@ -24,9 +23,8 @@ app = Flask(__name__)
 # ---------- database ----------
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = psycopg2.connect(DATABASE_URL)
+        g.db.autocommit = False
     return g.db
 
 
@@ -38,23 +36,25 @@ def close_db(_exc):
 
 
 def init_db():
-    with sqlite3.connect(DB_PATH) as con:
-        con.executescript("""
-            CREATE TABLE IF NOT EXISTS months (
-                month  TEXT PRIMARY KEY,
-                salary REAL NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS items (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                month     TEXT NOT NULL,
-                name      TEXT NOT NULL,
-                category  TEXT NOT NULL DEFAULT 'Other',
-                amount    REAL NOT NULL DEFAULT 0,
-                recurring INTEGER NOT NULL DEFAULT 0,
-                paid      INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE INDEX IF NOT EXISTS idx_items_month ON items(month);
+    with psycopg2.connect(DATABASE_URL) as con:
+        with con.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS months (
+                    month  TEXT PRIMARY KEY,
+                    salary REAL NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS items (
+                    id        SERIAL PRIMARY KEY,
+                    month     TEXT NOT NULL,
+                    name      TEXT NOT NULL,
+                    category  TEXT NOT NULL DEFAULT 'Other',
+                    amount    REAL NOT NULL DEFAULT 0,
+                    recurring INTEGER NOT NULL DEFAULT 0,
+                    paid      INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_items_month ON items(month);
             """)
+        con.commit()
 
 
 # ---------- helpers ----------
@@ -101,8 +101,17 @@ def item_to_dict(row):
     }
 
 
+def cursor(db):
+    """Return a dict cursor."""
+    return db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+
 def ensure_month(db, month):
-    db.execute("INSERT OR IGNORE INTO months(month, salary) VALUES (?, 0)", (month,))
+    with cursor(db) as cur:
+        cur.execute(
+            "INSERT INTO months(month, salary) VALUES (%s, 0) ON CONFLICT (month) DO NOTHING",
+            (month,)
+        )
 
 
 def previous_month(month):
@@ -122,10 +131,11 @@ def index():
 def get_month(month):
     check_month(month)
     db = get_db()
-    row = db.execute("SELECT salary FROM months WHERE month = ?", (month,)).fetchone()
-    items = db.execute(
-        "SELECT * FROM items WHERE month = ? ORDER BY id", (month,)
-    ).fetchall()
+    with cursor(db) as cur:
+        cur.execute("SELECT salary FROM months WHERE month = %s", (month,))
+        row = cur.fetchone()
+        cur.execute("SELECT * FROM items WHERE month = %s ORDER BY id", (month,))
+        items = cur.fetchall()
     return jsonify(
         month=month,
         salary=row["salary"] if row else 0,
@@ -139,7 +149,8 @@ def set_salary(month):
     salary = parse_amount((request.get_json(silent=True) or {}).get("salary"))
     db = get_db()
     ensure_month(db, month)
-    db.execute("UPDATE months SET salary = ? WHERE month = ?", (salary, month))
+    with cursor(db) as cur:
+        cur.execute("UPDATE months SET salary = %s WHERE month = %s", (salary, month))
     db.commit()
     return jsonify(month=month, salary=salary)
 
@@ -154,12 +165,13 @@ def add_item(month):
     recurring = 1 if data.get("recurring") else 0
     db = get_db()
     ensure_month(db, month)
-    cur = db.execute(
-        "INSERT INTO items(month, name, category, amount, recurring) VALUES (?,?,?,?,?)",
-        (month, name, category, amount, recurring),
-    )
+    with cursor(db) as cur:
+        cur.execute(
+            "INSERT INTO items(month, name, category, amount, recurring) VALUES (%s,%s,%s,%s,%s) RETURNING *",
+            (month, name, category, amount, recurring),
+        )
+        row = cur.fetchone()
     db.commit()
-    row = db.execute("SELECT * FROM items WHERE id = ?", (cur.lastrowid,)).fetchone()
     return jsonify(item_to_dict(row)), 201
 
 
@@ -168,37 +180,40 @@ def update_item(item_id):
     data = request.get_json(silent=True) or {}
     fields, values = [], []
     if "name" in data:
-        fields.append("name = ?")
+        fields.append("name = %s")
         values.append(clean_text(data["name"], "Name", 80))
     if "category" in data:
-        fields.append("category = ?")
+        fields.append("category = %s")
         values.append(clean_text(data["category"], "Category", 40))
     if "amount" in data:
-        fields.append("amount = ?")
+        fields.append("amount = %s")
         values.append(parse_amount(data["amount"]))
     if "recurring" in data:
-        fields.append("recurring = ?")
+        fields.append("recurring = %s")
         values.append(1 if data["recurring"] else 0)
     if "paid" in data:
-        fields.append("paid = ?")
+        fields.append("paid = %s")
         values.append(1 if data["paid"] else 0)
     if not fields:
         raise BadRequest("Nothing to update.")
     db = get_db()
-    cur = db.execute(
-        f"UPDATE items SET {', '.join(fields)} WHERE id = ?", (*values, item_id)
-    )
+    with cursor(db) as cur:
+        cur.execute(
+            f"UPDATE items SET {', '.join(fields)} WHERE id = %s RETURNING *",
+            (*values, item_id),
+        )
+        row = cur.fetchone()
     db.commit()
-    if cur.rowcount == 0:
+    if row is None:
         return jsonify(error="Account not found."), 404
-    row = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
     return jsonify(item_to_dict(row))
 
 
 @app.delete("/api/items/<int:item_id>")
 def delete_item(item_id):
     db = get_db()
-    db.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    with cursor(db) as cur:
+        cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
     db.commit()
     return jsonify(deleted=item_id)
 
@@ -211,84 +226,88 @@ def copy_recurring(month):
     db = get_db()
     ensure_month(db, month)
 
-    current = db.execute(
-        "SELECT salary FROM months WHERE month = ?", (month,)
-    ).fetchone()
-    last = db.execute("SELECT salary FROM months WHERE month = ?", (prev,)).fetchone()
-    if current["salary"] == 0 and last and last["salary"] > 0:
-        db.execute(
-            "UPDATE months SET salary = ? WHERE month = ?", (last["salary"], month)
-        )
+    with cursor(db) as cur:
+        cur.execute("SELECT salary FROM months WHERE month = %s", (month,))
+        current = cur.fetchone()
+        cur.execute("SELECT salary FROM months WHERE month = %s", (prev,))
+        last = cur.fetchone()
 
-    existing = {
-        (r["name"].lower(), r["category"])
-        for r in db.execute(
-            "SELECT name, category FROM items WHERE month = ?", (month,)
+        if current["salary"] == 0 and last and last["salary"] > 0:
+            cur.execute(
+                "UPDATE months SET salary = %s WHERE month = %s",
+                (last["salary"], month)
+            )
+
+        cur.execute("SELECT name, category FROM items WHERE month = %s", (month,))
+        existing = {(r["name"].lower(), r["category"]) for r in cur.fetchall()}
+
+        cur.execute(
+            "SELECT * FROM items WHERE month = %s AND recurring = 1 ORDER BY id", (prev,)
         )
-    }
-    copied = 0
-    for r in db.execute(
-        "SELECT * FROM items WHERE month = ? AND recurring = 1 ORDER BY id", (prev,)
-    ).fetchall():
-        if (r["name"].lower(), r["category"]) in existing:
-            continue
-        db.execute(
-            "INSERT INTO items(month, name, category, amount, recurring) VALUES (?,?,?,?,1)",
-            (month, r["name"], r["category"], r["amount"]),
-        )
-        copied += 1
+        prev_items = cur.fetchall()
+
+        copied = 0
+        for r in prev_items:
+            if (r["name"].lower(), r["category"]) in existing:
+                continue
+            cur.execute(
+                "INSERT INTO items(month, name, category, amount, recurring) VALUES (%s,%s,%s,%s,1)",
+                (month, r["name"], r["category"], r["amount"]),
+            )
+            copied += 1
+
     db.commit()
     return jsonify(copied=copied, source=prev)
 
 
 @app.get("/api/history")
 def history():
-    rows = get_db().execute("""
-        SELECT m.month,
-               m.salary,
-               COALESCE(SUM(i.amount), 0) AS spent
-        FROM months m
-        LEFT JOIN items i ON i.month = m.month
-        GROUP BY m.month
-        ORDER BY m.month
-        """).fetchall()
-    return jsonify(
-        [
-            {
-                "month": r["month"],
-                "salary": r["salary"],
-                "spent": round(r["spent"], 2),
-                "left": round(r["salary"] - r["spent"], 2),
-            }
-            for r in rows
-        ]
-    )
+    db = get_db()
+    with cursor(db) as cur:
+        cur.execute("""
+            SELECT m.month,
+                   m.salary,
+                   COALESCE(SUM(i.amount), 0) AS spent
+            FROM months m
+            LEFT JOIN items i ON i.month = m.month
+            GROUP BY m.month
+            ORDER BY m.month
+        """)
+        rows = cur.fetchall()
+    return jsonify([
+        {
+            "month": r["month"],
+            "salary": r["salary"],
+            "spent": round(r["spent"], 2),
+            "left": round(r["salary"] - r["spent"], 2),
+        }
+        for r in rows
+    ])
 
 
 @app.get("/api/export.csv")
 def export_csv():
-    rows = get_db().execute("""
-        SELECT m.month, m.salary, i.name, i.category, i.amount, i.recurring, i.paid
-        FROM months m LEFT JOIN items i ON i.month = m.month
-        ORDER BY m.month, i.id
-        """).fetchall()
+    db = get_db()
+    with cursor(db) as cur:
+        cur.execute("""
+            SELECT m.month, m.salary, i.name, i.category, i.amount, i.recurring, i.paid
+            FROM months m LEFT JOIN items i ON i.month = m.month
+            ORDER BY m.month, i.id
+        """)
+        rows = cur.fetchall()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(
-        ["month", "salary", "account", "category", "amount", "monthly", "paid"]
-    )
+    writer.writerow(["month", "salary", "account", "category", "amount", "monthly", "paid"])
     for r in rows:
-        writer.writerow(
-            [
-                r["month"],
-                r["salary"],
-                r["name"] or "",
-                r["category"] or "",
-                r["amount"] if r["name"] else "",
-                "yes" if r["recurring"] else "no" if r["name"] else "",
-                "yes" if r["paid"] else "no" if r["name"] else "",
-            ]
-        )
+        writer.writerow([
+            r["month"],
+            r["salary"],
+            r["name"] or "",
+            r["category"] or "",
+            r["amount"] if r["name"] else "",
+            "yes" if r["recurring"] else "no" if r["name"] else "",
+            "yes" if r["paid"] else "no" if r["name"] else "",
+        ])
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
